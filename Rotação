@@ -1,0 +1,268 @@
+// rotação no eixo Y com o seu objeto no AR levando em consideração a sua posição no mundo O SEU PIVO PRINCIPALMENTE, e de acordo com o deslizante do movimentação
+//boa sorte/
+// ta mto grande
+
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+public class Rotação : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
+{
+    public float rotateSpeed = 0.9f;// Define a velocidade de rotação do objeto
+    public ARPlacement arPlacement;// Referência ao componente ARPlacement que gerencia a posição e a rotação do objeto
+    public float rotateDirection = 0.3f;// Define a direção da rotação do objeto
+    public bool isRotateButtonPressed = false;// Variável que indica se o botão de rotação está sendo pressionado
+    float smoothness = 1.5f;// Define a suavidade da rotação do objeto
+    public bool isDragging = false;// Variáveis que armazenam a posição anterior do toque na tela
+    private Vector3 previousPosition;
+    public Slider slider;// Referência ao componente Slider que controla a rotação do objeto
+    private bool isSliderAtLimit = false;// Variável que indica se o controle deslizante está no limite máximo ou mínimo
+    public bool isMoving = false;
+    public float zMin = 0f;
+    public float zMax = 35f;
+    private float previousDelta = 0f;
+    public bool shouldInvertRotation = true;
+    private float lastmovimentaçãoSliderValue = 0f;
+    public GameObject objectToRotate;
+    private float previousmovimentaçãoSliderValue = 0.5f; // Variável que armazena o valor anterior do deslizante do MovButtonScript
+    public Movimentação movimentação;
+    private bool hasmovimentaçãoPressed = false;
+    private bool shouldInvertRotationOnmovimentaçãoPress = false; // Variável que indica se a direção da rotação deve ser invertida quando o deslizante do MovButtonScript é pressionado
+    private float tolerance = 0.1f; // Define a tolerância para verificar se o valor do deslizante do MovButtonScript está dentro de um intervalo específico
+    public bool isInvertedRotation = true;
+    public bool shouldStopRotation = false; // Variável para armazenar o estado da rotação
+    public bool isrotaçãoPressed = false; // Variável para armazenar o estado do botão do MovButtonScript
+    public bool hasmovimentaçãoBeenPressed = false;
+
+    void Start()
+    {
+        slider.value = 0.5f;// Define o valor inicial do controle deslizante como 0.5
+        slider.onValueChanged.AddListener(OnSliderValueChanged);// Adiciona um listener para o evento de mudança de valor do controle deslizante
+        movimentação.slider.onValueChanged.AddListener(OnSliderValueChanged);
+        EventTrigger trigger = GetComponent<EventTrigger>();
+        EventTrigger.Entry entry = new();
+        entry.eventID = EventTriggerType.PointerUp;
+        entry.callback.AddListener((data) => { OnPointerUp((PointerEventData)data); });
+        trigger.triggers.Add(entry);
+    }
+    void Update()
+    {
+        
+        if (slider.value < 0.5)
+        {
+            rotateDirection = -1;
+            rotateSpeed = Mathf.Abs(rotateSpeed);
+        }
+        else if (slider.value > 0.5)
+        {
+            rotateDirection = +1;
+            rotateSpeed = Mathf.Abs(rotateSpeed);
+        }
+        if (movimentação.slider.value >= 0.49f && movimentação.slider.value < 0.51f)
+        {
+            rotateSpeed = 0f;
+        }
+        if (Mathf.Abs(slider.value - 0.5f) <= 0.01f)
+        {
+            slider.value = 0.5f;
+        }
+        else
+        {
+            if (movimentação.slider.value != 0.5f)
+            {
+                if (isSliderAtLimit)
+                {
+                    float deltaRotation = rotateSpeed * rotateDirection * Time.deltaTime * smoothness;
+                    arPlacement.RotateObject(deltaRotation);
+                }
+                if (movimentação.slider.value >= 0 && movimentação.slider.value < 0.49f && !shouldInvertRotation)
+                {
+                    shouldInvertRotation = true;
+                    rotateDirection = -1f - slider.value;
+                    slider.direction = Slider.Direction.RightToLeft;
+                    slider.direction = Slider.Direction.RightToLeft;
+                    slider.value = 1f - slider.value;
+                }
+                else if (movimentação.slider.value > 0.51f && movimentação.slider.value <= 1 && shouldInvertRotation)
+                {
+                    shouldInvertRotation = false;
+                    rotateDirection = 1f - slider.value;
+                    slider.direction = Slider.Direction.LeftToRight;
+                    slider.value = 1f - slider.value;
+                }
+
+                else if (movimentação.slider.value >= 0.51f * smoothness)
+                {
+                    isInvertedRotation = false;
+                }
+            }
+            if (movimentação.slider.value != lastmovimentaçãoSliderValue)
+            {
+                lastmovimentaçãoSliderValue = movimentação.slider.value;
+            }
+            if (isRotateButtonPressed && hasmovimentaçãoBeenPressed && (movimentação.slider.value < 0.6f - tolerance || movimentação.slider.value > 0.5f + tolerance))
+            {
+                // Atualiza a rotação do objeto com base no valor do deslizante
+                if (slider.value <= 0f)
+                {
+                    isSliderAtLimit = true;
+                    rotateDirection = shouldInvertRotationOnmovimentaçãoPress ? -1f : 1f - slider.value;
+                }
+                else if (slider.value >= 1f)
+                {
+                    isSliderAtLimit = true;
+                    rotateDirection = shouldInvertRotationOnmovimentaçãoPress ? 1f : -1f - slider.value;
+                }
+                else
+                {
+                    isSliderAtLimit = false;
+                }
+            }
+            if (movimentação.slider.value <= 0.4f && previousmovimentaçãoSliderValue > 0.6f)
+            {
+                shouldInvertRotation = !shouldInvertRotation;
+                rotateDirection = shouldInvertRotation ? 1f : -1f;
+                slider.direction = shouldInvertRotation ? Slider.Direction.RightToLeft : Slider.Direction.LeftToRight;
+                slider.value = 1f - slider.value;
+            }
+            previousmovimentaçãoSliderValue = movimentação.slider.value;
+        }
+
+    }
+    void OnSliderValueChanged(float value)
+        {
+
+        if (!isDragging) return;
+        if (movimentação.slider.value != 0.5f)
+        {
+            float newZPosition = Mathf.Lerp(zMin, zMax, value);
+            float delta = value - 0.5f;
+            arPlacement.RotateObject(delta);
+            rotateSpeed = Mathf.Abs(delta) * 50f;
+            if (value <= 0f)
+            {
+                isSliderAtLimit = true;
+                rotateDirection = -1f - slider.value;
+            }
+            if (value >= 0.51f && value <= 1)
+            {
+                isSliderAtLimit = true;
+                rotateDirection = 1f - slider.value;
+            }
+            else if (value >= 0f && value <= 0.49f)
+            {
+                isSliderAtLimit = true;
+                rotateDirection = -1f - slider.value;
+            }
+        }
+    }
+    public void OnPointerDown(PointerEventData eventData)
+        {
+            previousPosition = eventData.position;
+            isRotateButtonPressed = true;
+            hasmovimentaçãoBeenPressed = true;
+            if (movimentação.slider.value >= 0.51f && movimentação.slider.value <= 0.4f)
+            {
+                isRotateButtonPressed = true;
+                hasmovimentaçãoBeenPressed = true;
+            }
+            isDragging = true;
+            previousPosition = eventData.position;
+            isInvertedRotation = true; // Define isInvertedRotaation como true quando o usuário toca na tela
+            if (movimentação.slider.value < 0.49f && movimentação.slider.value <= 0.49f && !shouldInvertRotation)
+            {
+                shouldInvertRotation = true;
+                rotateDirection = -1f;
+                slider.direction = Slider.Direction.RightToLeft;
+                slider.value = 1f - slider.value;
+            }
+            else if (movimentação.slider.value >= 0.51f && movimentação.slider.value * smoothness <= 0.4f && shouldInvertRotation)
+            {
+                shouldInvertRotation = false;
+                rotateDirection = 1f;
+                slider.direction = Slider.Direction.LeftToRight;
+                slider.value = 1f - slider.value;
+            }
+        }
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (isDragging)
+            {
+                float tolerance = 0.1f; // Define a tolerância
+                if (movimentação.slider.value >= 0.51f - tolerance && movimentação.slider.value <= 0.5f + tolerance) // Adiciona uma condição para verificar se o valor do deslizante está dentro do intervalo
+                {
+                    return;
+                }
+                if (!isSliderAtLimit && !shouldStopRotation) // Adicionaa uma condiçaão adicional para verificar o valor do deslizante
+                {
+                    float deltaRotation = (eventData.position.x - previousPosition.x) * 0.05f;
+                    arPlacement.RotateObject(deltaRotation);
+                    if (movimentação.slider.value < 0.5f)
+                    {
+                        deltaRotation = -deltaRotation;
+                    }
+                }
+                previousPosition = eventData.position;
+                if (RectTransformUtility.RectangleContainsScreenPoint(slider.GetComponent<RectTransform>(), eventData.position))
+                {
+                    float value = Mathf.InverseLerp(slider.GetComponent<RectTransform>().rect.xMin, slider.GetComponent<RectTransform>().rect.xMax, eventData.position.x);
+                }
+            }
+            if (movimentação.slider.value <= 0.49f && movimentação.slider.value <= 0.49f && !shouldInvertRotation)
+            {
+                shouldInvertRotation = true;
+                rotateDirection = -1f;
+                slider.direction = Slider.Direction.RightToLeft;
+                slider.value = 1f - slider.value;
+            }
+            else if (movimentação.slider.value >= 0.51f && movimentação.slider.value * smoothness <= 0.49f && shouldInvertRotation)
+            {
+                shouldInvertRotation = false;
+                rotateDirection = 1f;
+                slider.direction = Slider.Direction.LeftToRight;
+                slider.value = 1f - slider.value;
+            }
+        }
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            previousPosition = eventData.position;
+            isRotateButtonPressed = false;
+            isDragging = false;
+            hasmovimentaçãoPressed = false;
+            float currentValue = slider.value;
+            slider.value = 0.5f;
+            if (currentValue <= 0f || currentValue >= 1f)
+            {
+                isSliderAtLimit = true;
+                rotateDirection = previousDelta >= 0.51f ? -1f : 1f;
+            }
+            else
+            {
+                isSliderAtLimit = false;
+            }
+        }
+        public void OnValueChanged()
+        {
+            if (movimentação.slider.value != 0.5f)
+            {
+                float value = slider.value;
+                objectToRotate.transform.position = new Vector3(value, 0, 0);
+            }
+        }
+        public void UpdateSliderValue(float value)
+        {
+            slider.value = value;
+        }
+        public void StopDragging()
+        {
+            isDragging = false;
+            isRotateButtonPressed = false;
+        }
+    public void OnRotateButtonPressed()
+    {
+        isRotateButtonPressed = true;
+    }
+    public void OnRotateButtonReleased()
+    {
+        isRotateButtonPressed = false;
+    }
+}
